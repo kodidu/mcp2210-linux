@@ -405,13 +405,13 @@ static int queue_msg(struct mcp2210_device *dev, struct spi_message *msg,
 		if (xfer->len > 0xffff) {
 			mcp2210_err("SPI transfer (or chain) too large for "
 				    "MCP2210 (%u bytes)", xfer_chain_size);
-			return -EINVAL;
+			return -EOVERFLOW;
 		}
 
 		if (xfer->cs_change && xfer != last_xfer)
 			xfer_chain_size = 0;
 
-		BUG_ON(!xfer->tx_buf);
+		BUG_ON(!(xfer->tx_buf || xfer->rx_buf));
 
 		if (xfer->bits_per_word && xfer->bits_per_word != 8) {
 			mcp2210_warn("unsupported: spi_transfer.bits_per_word "
@@ -621,11 +621,15 @@ static int spi_submit_prepare(struct mcp2210_cmd *cmd_head)
 	if (IS_ENABLED(CONFIG_MCP2210_DEBUG)
 	    && cmd->pos + cmd->pending_bytes == 0 && dump_spi) {
 		char msg_prefix[32];
-		BUG_ON(!xfer->tx_buf);
+
 		snprintf(msg_prefix, sizeof(msg_prefix), "%s -->: ",
 			 dev_name(&cmd->spi->dev));
-		print_hex_dump(KERN_INFO, msg_prefix, DUMP_PREFIX_OFFSET, 16, 1,
-			       xfer->tx_buf, xfer->len, true);
+		if (xfer->tx_buf)
+		    print_hex_dump(KERN_INFO, msg_prefix, DUMP_PREFIX_OFFSET,
+				   16, 1, xfer->tx_buf, xfer->len, true);
+		else
+		    printk(KERN_INFO "%s(null tx_buf), %u bytes",
+			   msg_prefix, xfer->len);
 	}
 
 	/* Write spi transfer command */
